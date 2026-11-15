@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Earthform Lens — read landscapes from satellite images</title>
+<meta name="description" content="Turn Google Earth and satellite screenshots into geomorphology findings, change maps and social-media-ready art.">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Playfair+Display:ital,wght@0,500;1,500&family=JetBrains+Mono:wght@400;500&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0d0f;--panel:#15171a;--p2:#1d2024;--line:#2a2e33;--text:#eef0f2;--muted:#8b929a;--acc:#ff7a45;--acc2:#3fc1d3;--ok:#5bd17a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 "Space Grotesk",system-ui,sans-serif}
+.app{max-width:760px;margin:0 auto;display:flex;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px}
+.logo{font-weight:700;font-size:17px;display:flex;gap:8px;align-items:center}
+.logo i{width:16px;height:16px;border-radius:4px;background:conic-gradient(#3fc1d3,#5bd17a,#e8c547,#ff7a45,#3fc1d3)}
+button{font:inherit;color:var(--text);background:var(--p2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.pri{background:var(--acc);border-color:var(--acc);color:#1a0a03;font-weight:700}
+button.sm{padding:5px 9px;font-size:12.5px}
+button:disabled{opacity:.4}
+.sticky{position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:4px}
+.viewer{position:relative;margin:0 10px;height:46vh;min-height:260px;background:#060708;border-radius:12px;overflow:hidden;touch-action:none}
+.viewer canvas{width:100%;height:100%;display:block;touch-action:none}
+.vmsg{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted)}
+.vmsg h2{margin:0;color:var(--text);font-size:19px}
+.vhint{position:absolute;left:8px;bottom:8px;right:8px;font-size:12px;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);padding:5px 9px;border-radius:8px;pointer-events:none}
+.vstat{position:absolute;right:8px;top:8px;font:11px "JetBrains Mono",monospace;background:rgba(0,0,0,.55);padding:3px 7px;border-radius:6px;pointer-events:none}
+.busy{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;font-size:13px}
+.busy.on{display:flex}
+.tools{display:flex;gap:5px;overflow-x:auto;padding:7px 10px 2px;scrollbar-width:none}
+.tools::-webkit-scrollbar{display:none}
+.tool{flex:none;padding:6px 9px;font-size:12.5px;border-radius:18px;background:var(--p2)}
+.tool.on{background:var(--text);color:#111}
+.layers{display:flex;gap:5px;overflow-x:auto;padding:4px 10px 0;scrollbar-width:none}
+.layers::-webkit-scrollbar{display:none}
+.lay{flex:none;font-size:11.5px;padding:4px 8px;border-radius:14px;background:transparent;color:var(--muted)}
+.lay.on{color:var(--text);border-color:var(--acc2);background:rgba(63,193,211,.12)}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);padding:0 8px;scrollbar-width:none;margin-top:4px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 9px;color:var(--muted)}
+.tab.on{color:var(--text);border-bottom-color:var(--acc)}
+.panel{display:none;padding:10px 12px 90px}
+.panel.on{display:block}
+h3{margin:4px 0 8px;font-size:15px}
+h4{margin:16px 0 6px;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+p.note{color:var(--muted);font-size:12.5px;margin:4px 0 8px}
+.row{display:flex;align-items:center;gap:8px;margin:8px 0}
+.row label{flex:none;width:118px;color:var(--muted);font-size:12.5px}
+.row output{flex:none;min-width:64px;text-align:right;font:12px "JetBrains Mono",monospace;color:var(--muted)}
+input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:26px;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:var(--line);border-radius:3px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--text);margin-top:-7.5px;border:none}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--text);border:none}
+input[type=number],input[type=text],select{font:inherit;color:var(--text);background:var(--p2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:0}
+input[type=number]{width:96px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:12.5px;padding:5px 9px;border-radius:16px}
+.chip.on{background:var(--text);color:#111}
+table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
+table.res td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+table.res td:nth-child(2){text-align:right;font-family:"JetBrains Mono",monospace;font-size:12.5px;white-space:nowrap}
+table.res tr.sec td{color:var(--acc2);font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;padding-top:12px}
+table.res td small{color:var(--muted)}
+table.grid{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
+table.grid th,table.grid td{padding:4px;border-bottom:1px solid var(--line);text-align:right;font-family:"JetBrains Mono",monospace}
+table.grid th{color:var(--muted);font-weight:400;font-family:"Space Grotesk"}
+table.grid td:first-child,table.grid th:first-child{text-align:left}
+canvas.chart{width:100%;height:190px;display:block;background:var(--panel);border-radius:10px;margin:8px 0}
+canvas.rose{width:100%;max-width:260px;aspect-ratio:1;height:auto;display:block;background:var(--panel);border-radius:10px;margin:8px auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}
+.warn{color:#ffc56b;font-size:12.5px}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;margin-right:6px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
+.modal.on{display:flex}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:420px;width:100%}
+textarea{width:100%;height:180px;background:var(--p2);color:var(--text);border:1px solid var(--line);border-radius:8px;font:11px "JetBrains Mono",monospace}
+.toast{position:fixed;left:50%;top:12px;transform:translate(-50%,-80px);background:#fff;color:#111;padding:8px 14px;border-radius:18px;font-size:13px;transition:transform .3s;z-index:40;max-width:90vw;text-align:center}
+.toast.on{transform:translate(-50%,0)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin:4px 0}
+.kv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:12.5px}
+
+/* ===== studio ===== */
+button.primary{background:var(--acc);border-color:var(--acc);color:#1a0a03;font-weight:700}
+button.ghost{background:transparent}
+.sbar{display:flex;gap:6px;justify-content:flex-end;padding:6px 12px 0}
+#s_btnEnhance.on{background:var(--acc);color:#1a0a03;border-color:var(--acc)}
+.stage{position:relative;margin:6px 12px 10px;background:#08090a;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:300px;touch-action:none}
+.stage canvas{display:block;max-width:100%;max-height:62vh;touch-action:none;cursor:grab}
+.empty{display:flex;align-items:center;justify-content:center;min-height:40vh;color:var(--muted)}
+.hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(0,0,0,.55);backdrop-filter:blur(6px);padding:5px 10px;border-radius:20px;font-size:12px;color:#dfe3e7;pointer-events:none;transition:opacity .4s;white-space:nowrap}
+.compare{position:absolute;top:10px;right:10px;padding:6px 10px;font-size:12px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border-color:rgba(255,255,255,.15);user-select:none;-webkit-user-select:none}
+.sbusy{position:absolute;top:12px;left:12px;width:10px;height:10px;border-radius:50%;background:var(--acc);opacity:0;transition:opacity .2s}
+.sbusy.on{opacity:1;animation:pulse .8s infinite alternate}
+@keyframes pulse{to{transform:scale(.5)}}
+.looks{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+.look{background:none;border:none;padding:0;display:flex;flex-direction:column;gap:5px;align-items:stretch;color:var(--muted);font-size:12px}
+.look canvas{width:100%;aspect-ratio:4/5;border-radius:10px;border:2px solid transparent;background:#1a1c1f;display:block}
+.look.on canvas{border-color:var(--acc)}
+.look.on{color:var(--text)}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.sw{height:38px;border-radius:9px;border:2px solid transparent;padding:0;position:relative}
+.sw.on{border-color:var(--text)}
+.sw span{position:absolute;left:6px;bottom:3px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000}
+.split{display:flex;gap:8px}
+.split>*{flex:1}
+p.sub{color:var(--muted);font-size:12px;line-height:1.45;margin:6px 0 0}
+#app-studio input[type=text]{width:100%;margin:4px 0}
+.footer{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;pointer-events:none;padding-bottom:env(safe-area-inset-bottom);z-index:6}
+.footer .inner{pointer-events:auto;width:100%;max-width:760px;display:flex;gap:8px;padding:10px 12px 14px;background:linear-gradient(transparent,var(--bg) 35%)}
+.footer .inner button{flex:1;padding:13px}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:30;padding:20px}
+.sheet.on{display:flex}
+.sheet img{max-width:100%;max-height:70vh;border-radius:6px}
+.sheet p{margin:0;color:#cfd4d9;text-align:center;font-size:13px;max-width:340px}
+/* ===== shell ===== */
+.appsec{display:none}.appsec.on{display:block}
+.seg{display:flex;background:var(--p2);border:1px solid var(--line);border-radius:11px;padding:2px;gap:2px}
+.seg button{border:none;background:transparent;padding:6px 10px;font-size:13px;border-radius:9px;color:var(--muted)}
+.seg button.on{background:var(--text);color:#111}
+header{flex-wrap:wrap;gap:8px}
+.home{padding:28px 18px 60px;text-align:center}
+.home .hero{font-size:46px;margin:6px 0}
+.home h1{font-size:25px;margin:6px 0 8px}
+.home p{color:var(--muted);max-width:440px;margin:0 auto 14px;line-height:1.5}
+.home .modes{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-width:520px;margin:22px auto 0;text-align:left}
+.home .modes div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;font-size:12px;color:var(--muted)}
+.home .modes b{display:block;color:var(--text);font-size:13.5px;margin-bottom:3px}
+.bigbtn{font-size:16px;padding:13px 26px;border-radius:12px}
+.rep{padding:8px 12px 90px}
+.rep h2{margin:6px 0 2px;font-size:21px}
+.rep .rsub{color:var(--muted);font-size:12px;font-family:"JetBrains Mono",monospace;margin-bottom:8px}
+#repArt{width:100%;max-width:520px;display:block;margin:8px auto;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.finds{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+.fd{display:flex;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px;align-items:flex-start}
+.fd canvas{width:104px;height:104px;border-radius:8px;flex:0 0 104px}
+.fdt{flex:1;min-width:0}.fdt small{color:var(--acc2,#43d9e8);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px;font-weight:600}
+.fdb b{font-family:"Libre Baskerville",serif;font-size:22px}.fdb span{color:var(--muted);font-size:12px}
+.fdt h5{margin:2px 0 3px;font-size:14px;font-family:"Libre Baskerville",serif;font-weight:700;line-height:1.3}.fdt p{margin:0 0 4px;font-size:12.8px;line-height:1.45;color:#cfd4d9}
+.fdt details summary{font-size:11.5px;color:var(--muted);cursor:pointer}
+.strip{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:8px 2px 12px;-webkit-overflow-scrolling:touch}
+.strip .sl{flex:0 0 80%;scroll-snap-align:center}.strip canvas{width:100%;height:auto;border-radius:10px;display:block;box-shadow:0 4px 18px rgba(0,0,0,.4)}
+.strip .sl.off canvas{opacity:.28;filter:grayscale(1)}.slbar{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--muted)}.slbar span{flex:1}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px}
+.stat b{display:block;font:500 15px "JetBrains Mono",monospace}
+.stat span{font-size:11.5px;color:var(--muted)}
+#repText p{line-height:1.55;margin:8px 0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
+summary{cursor:pointer;font-weight:500}
+summary small{color:var(--muted);font-weight:400;margin-left:6px}
+.lg{font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.lg small{color:var(--muted);width:100%;padding-left:18px}
+.lg.failed span{color:#ff6b6b}.lg.done span{color:var(--ok)}
+.st{display:flex;gap:10px;align-items:flex-start;padding:6px 0;opacity:.5}
+.st.run,.st.ok,.st.skip,.st.bad{opacity:1}
+.st .ic{width:18px;text-align:center;font-weight:700}
+.st.ok .ic{color:var(--ok)}.st.bad .ic{color:#ff6b6b}.st.run .ic{color:var(--acc);animation:pulse .6s infinite alternate}
+.st small{display:block;color:var(--muted);font-size:12px}
+.chk{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}
+
+.place{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px;margin:8px 0}
+.place .ph{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.place .ph span{font-size:11px;color:var(--acc2);white-space:nowrap}
+.place .pc{font-size:12px;color:var(--muted);margin:2px 0 6px}
+.place p{margin:4px 0 8px;font-size:13px;line-height:1.45}
+.place .pb{display:flex;flex-wrap:wrap;gap:6px}
+.place .pt{font-size:11.5px;color:var(--muted);margin-top:6px}
+.lnk{font-size:12.5px;padding:5px 9px;border-radius:9px;background:var(--p2);border:1px solid var(--line);color:var(--text);text-decoration:none}
+.mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+table.res tr[data-gk]{cursor:pointer}
+table.res tr[data-gk] td:first-child::after{content:" ⓘ";color:var(--acc2);font-size:11px;opacity:.7}
+table.res tr.open td{background:rgba(63,193,211,.06)}
+tr.exrow td{padding:0 0 8px!important}
+.ex{background:#101215;border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:8px;padding:9px 10px;font-size:12.8px;line-height:1.5;text-align:left;white-space:normal;font-family:"Space Grotesk",sans-serif}
+.ex>div{margin:4px 0}
+.exh{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--acc2);margin-bottom:1px}
+.ex .mono{color:#ffd9a8}
+details.how{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0 10px}
+details.how summary{color:var(--acc2);font-size:13px}
+details.how ol{padding-left:18px;margin:8px 0;font-size:12.8px;line-height:1.5}
+details.how li{margin:4px 0}
+svg.dg{width:100%;max-width:440px;display:block;margin:8px auto;background:#0f1114;border-radius:8px}
+details.gl{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin:5px 0}
+details.gl summary small{color:var(--muted);margin-left:6px}
+.seg button{padding:6px 8px;font-size:12.5px}
+#app-lab.noview .sticky{display:none}
+.seri{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}
+.seri.on{border-color:var(--acc2)}
+.seri .sh{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.seri .sh b{font-size:13px;word-break:break-all}
+.focuschips .chip{white-space:nowrap;flex:none}
+.story p{margin:6px 0;font-size:13px;line-height:1.5}
+ol.hot{padding-left:18px;margin:4px 0;font-size:13px}
+ol.hot li{margin:5px 0}
+.story p.big{font-size:19px;font-weight:700;margin:8px 0}
+
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 10px}
+.steps button{padding:7px 2px;font-size:12.5px;border-radius:10px;background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.steps button.on{background:var(--acc);color:#1a0a03;border-color:var(--acc);font-weight:700}
+.steps button small{display:block;font-size:10px;opacity:.75;font-weight:400}
+.labctl{display:flex;gap:6px;padding:6px 10px 0;align-items:center}
+.labctl select{flex:1;min-width:0;font-size:12.5px;padding:5px 6px}
+.layers{flex-wrap:wrap;background:var(--panel);margin:6px 10px 0;border-radius:10px;padding:6px;border:1px solid var(--line)}
+#app-lab .tabs{margin-top:2px}
+canvas.cmpcv{width:100%;display:block;border-radius:10px;margin:6px 0;touch-action:pan-y}
+.yrs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted)}
+.yrs input{width:80px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo"><i></i>Earthform Lens</div>
+  <nav class="seg"><button data-app="discover">Discover</button><button data-app="report">✦ Findings</button><button data-app="posts">Posts</button><button data-app="studio">Studio</button><button data-app="lab">Lab</button></nav>
+  <button class="sm" id="btnOpen">Open…</button>
+</header>
+
+<section class="appsec" id="app-home"><div class="home">
+  <div class="hero">🛰️</div>
+  <h1>Satellite art and landscape science, from one image</h1>
+  <p>Open a Google Earth screenshot, a satellite GeoTIFF or an elevation model. Earthform Lens reads the landscape: it detects water and channels (rivers, tributaries, deltas, coasts, even seafloor canyons), measures them, compares dates, explains every number, and turns the findings into art and ready-to-post carousels.</p>
+  <div class="btns" style="justify-content:center"><button class="pri bigbtn" id="homeOpen">Open image</button><button class="bigbtn" id="homeFind">Find a place</button></div>
+  <div class="note" style="margin-top:16px">What will you be looking at?</div>
+  <div class="chips focuschips" style="justify-content:center;max-width:520px;margin:6px auto"></div>
+  <div class="note focusdesc"></div>
+  <div style="margin-top:12px"><label class="chk"><input type="checkbox" id="autoOnOpen" checked> Run everything automatically when opened</label></div>
+  <div class="modes"><div><b>Discover</b>A curated atlas of striking places, with links to frame them in Google Earth.</div><div><b>✦ Report</b>One-tap analysis and art, with a plain-language summary and a data poster.</div><div><b>Studio</b>Hand-tune looks, colour, crop, captions and line-art overlays.</div><div><b>Lab</b>Every measurement tool, adjustable step by step.</div></div>
+</div></section>
+
+<section class="appsec" id="app-discover"><div class="rep">
+  <h2>Discover places</h2>
+  <p class="note">Pick a place, open it in Google Earth or Maps satellite view, screenshot it, then open the screenshot here. Tap “Use as caption” first and the next image is labelled in the atlas style automatically.</p>
+  <details class="how"><summary>ⓘ How to capture a clean, poster-ready image</summary><ol>
+    <li><b>Hide labels.</b> Google Earth: ☰ → Map Style → <i>Clean</i>. Google Maps: Layers → More → untick Labels.</li>
+    <li><b>Frame for contrast.</b> The strongest images split the frame between two worlds (city and forest, fields and road, water and land), or fill it with one repeating pattern.</li>
+    <li><b>Go portrait.</b> Hold the phone upright and zoom until the feature fills the screen. Earthform Lens crops to 5:7 or 4:5.</li>
+    <li><b>Look straight down.</b> Tilted 3D views distort shapes and measurements. In Google Earth press the 2D/3D button for a flat view.</li>
+    <li><b>Screenshot and open it here.</b> Earthform Lens trims the toolbars and buttons, applies the Atlas look and adds the place label.</li>
+    <li><b>For measurements</b>, use Earth's ruler on a feature you'll recognise, then enter the length in Lab → Setup.</li>
+    <li><b>Credit imagery</b> when sharing, e.g. “Imagery © Google, Airbus, Maxar”, or “Copernicus Sentinel‑2” for Sentinel images.</li></ol></details>
+  <input type="text" id="dSearch" placeholder="Search places, e.g. dunes, delta, Brazil" style="width:100%;margin:8px 0">
+  <div class="chips" id="dCats"></div>
+  <div class="btns"><button class="sm" id="dRandom">🎲 Random place</button><span class="note" id="dPending"></span></div>
+  <div id="dList"></div>
+</div></section>
+
+<section class="appsec" id="app-report"><div class="rep">
+  <div id="repEmpty" class="card" style="text-align:center"><p class="note">Nothing analysed yet.</p><button class="pri" id="repAuto">✦ Analyse & style automatically</button></div>
+  <div id="repBody" style="display:none">
+    <h2 id="repTitle"></h2><div class="rsub" id="repSub"></div>
+    <details class="how" style="margin:6px 0"><summary id="repFocus">Landscape type</summary><p class="note">Not right? Pick what you're looking at and everything re-runs with settings for it.</p><div class="chips focuschips"></div></details>
+    <div class="scaleprompt"></div>
+    <div class="chips" style="justify-content:center"><button class="chip rv on" data-v="atlas">Atlas</button><button class="chip rv" data-v="art">Art</button><button class="chip rv" data-v="poster">Data poster</button><button class="chip rv" data-v="lines">Line art</button></div>
+    <input type="text" id="repCaption" placeholder="Add a place name for the label, e.g. Lagos, Nigeria" style="width:100%;margin:6px 0">
+    <canvas id="repArt"></canvas>
+    <div class="btns" style="justify-content:center"><button class="pri" id="repSave">Save image</button><button id="repEdit">Edit in Studio</button><button id="repLab">Inspect in Lab</button></div>
+    <div class="stats" id="repStats"></div>
+    <h4>What we found</h4><p class="note" style="margin-top:-4px">Each card is one result: the number, what it means and where it is. Tap “Show on map” to inspect it.</p>
+    <div id="repFindings" class="finds"></div>
+    <div class="btns" style="justify-content:center"><button class="pri" id="repPosts">✦ Turn findings into posts</button></div>
+    <details class="how"><summary>Full write-up</summary><div id="repText"></div></details>
+    <h4>Changes over time</h4><div id="repChange" class="card"></div>
+    <h4>All measurements</h4><div id="repDetails"></div>
+    <div class="btns"><button class="sm" id="repCsv">Metrics CSV</button><button class="sm" id="repJson">Full report JSON</button><button class="sm" id="repRerun">Re-run automatically</button><button class="sm pri" id="repPlot">📈 Make a plot</button></div>
+    <h4>Automatic steps</h4><div id="repLog"></div>
+  </div>
+</div></section>
+
+<section class="appsec" id="app-posts"><div class="rep">
+  <div id="postEmpty" class="card" style="text-align:center"><p class="note">Open an image and analyse it first; every finding then becomes a slide.</p><button class="pri" id="postAuto">✦ Analyse automatically</button></div>
+  <div id="postBody" style="display:none">
+    <h2>Posts</h2><p class="note">A ready-made carousel: a cover, one slide per finding and a numbers slide. Swipe the previews, leave out or reword any slide, then share or save them all.</p>
+    <div class="chips" id="postFmt"></div><div class="chips" id="postTheme"></div>
+    <div id="postStrip" class="strip"></div>
+    <div class="btns" style="justify-content:center"><button class="pri" id="postShare">Share all <span id="postCount"></span></button><button id="postZip">Save all (.zip)</button></div>
+    <h4>Caption</h4><textarea id="postCap" style="width:100%;min-height:200px"></textarea>
+    <div class="btns"><button class="sm" id="postCopy">Copy caption</button></div>
+  </div>
+</div></section>
+
+<section class="appsec" id="app-studio">
+<div class="sbar"><button class="sm" id="s_btnEnhance" disabled>✦ Atlas enhance</button><button class="sm" id="s_btnAutoStyle" disabled>Auto-style</button><button class="sm" id="s_btnSurprise" disabled>Surprise me</button></div>
+<div class="stage" id="s_stage">
+    <div class="empty" id="s_empty"><p>Open an image to start.</p></div>
+    <canvas id="s_view" style="display:none"></canvas>
+    <div class="sbusy" id="s_busy"></div>
+    <button class="compare" id="s_btnCompare" style="display:none">Hold to compare</button>
+    <div class="hint" id="s_hint" style="opacity:0">Drag to move · pinch or use Zoom to crop</div>
+  </div>
+  
+
+  <nav class="tabs" id="s_tabs">
+    <button class="tab on" data-t="looks">Looks</button>
+    <button class="tab" data-t="adjust">Adjust</button>
+    <button class="tab" data-t="color">Color</button>
+    <button class="tab" data-t="frame">Frame</button>
+  </nav>
+
+  <section class="panel on" id="s_p-looks">
+    <div class="looks" id="s_looks"></div>
+    <div class="row" style="margin-top:16px"><label>Intensity</label><input type="range" id="s_intensity" min="0" max="150" value="100"><output id="s_intensityOut">100</output></div>
+  </section>
+
+  <section class="panel" id="s_p-adjust"></section>
+
+  <section class="panel" id="s_p-color">
+    <h4>Gradient map</h4>
+    <div class="swatches" id="s_gmaps"></div>
+    <div class="row"><label>Map amount</label><input type="range" id="s_gmapAmt" min="0" max="100" value="0"><output id="s_gmapAmtOut">0</output></div>
+    <h4>Channel remix</h4>
+    <div class="chips" id="s_channels"></div>
+    <p class="sub">Infrared swaps red and green, so vegetation glows red the way false-color satellite images show it.</p>
+    <h4>Selective color</h4>
+    <div class="chips" id="s_bands"></div>
+    <div id="s_bandSliders"></div>
+  </section>
+
+  <section class="panel" id="s_p-frame">
+    <h4>Aspect</h4>
+    <div class="chips" id="s_aspects"></div>
+    <div class="row"><label>Zoom</label><input type="range" id="s_zoom" min="100" max="600" value="100"><output id="s_zoomOut">1.0×</output></div>
+    <div class="split"><button id="s_btnRotate">⟳ Rotate 90°</button><button id="s_btnCenter">Recenter</button></div>
+    <h4>Analysis line art</h4>
+    <div class="chips" id="s_ovs"></div>
+    <p class="sub">Draws the channels and streams measured in the Lab onto the artwork.</p>
+    <div class="split" style="margin-top:8px"><button id="s_btnUseRoi">Crop to Lab analysis area</button></div>
+    <h4>Border</h4>
+    <div class="chips" id="s_borders"></div>
+    <p class="sub">“Data card” adds a stats panel with the key measurements under the image.</p>
+    <h4>Caption</h4>
+    <input type="text" id="s_capTitle" placeholder="Title, e.g. Nushagak Bay">
+    <input type="text" id="s_capSub" placeholder="Subtitle, e.g. Alaska · 58.9°N 158.5°W">
+    <div class="chips" id="s_capstyles" style="margin-top:6px"></div>
+    <div class="chips" id="s_cappos" style="margin-top:6px"></div>
+    <div class="chips" id="s_fonts" style="margin-top:6px"></div>
+    <h4>Export</h4>
+    <div class="chips" id="s_sizes"></div>
+    <div class="chips" id="s_formats" style="margin-top:8px"></div>
+  </section>
+
+<div class="footer"><div class="inner">
+  <button id="s_btnReset" disabled>Reset</button>
+  <button class="primary" id="s_btnSave" disabled>Save image</button>
+</div></div>
+
+<div class="sheet" id="s_sheet">
+  <img id="s_sheetImg" alt="Your exported image">
+  <p id="s_sheetMsg">Press and hold the image to save it to Photos or share it.</p>
+  <div class="split" style="width:100%;max-width:340px">
+    <button id="s_btnSheetSave" style="display:none">Download file</button>
+    <button class="primary" id="s_btnSheetClose">Done</button>
+  </div>
+</div>
+<div class="toast" id="s_toast"></div>
+
+
+</section>
+
+<section class="appsec" id="app-lab">
+<div class="sticky">
+  <div class="steps" id="steps"></div>
+  <div class="viewer" id="viewer">
+    <canvas id="view"></canvas>
+    <div class="vmsg" id="vmsg"><div style="font-size:34px">🛰️</div><h2>Measure landscapes from above</h2>
+      <div>Open a Google Earth screenshot, a satellite GeoTIFF (e.g. Sentinel‑2 or Landsat), or an elevation model (DEM GeoTIFF).</div>
+      <button class="pri" id="btnOpen2">Open file</button></div>
+    <div class="vstat" id="vstat" style="display:none"></div>
+    <div class="vhint" id="vhint" style="display:none"></div>
+    <div class="busy" id="busy"><span id="busyMsg">Working…</span></div>
+  </div>
+  <div class="tools" id="tools"></div>
+  <div class="labctl"><button class="sm pri" id="btnAutoLab">✦ Auto</button><select id="labFocus" title="What is this landscape?"></select><button class="sm" id="btnLayers">Layers ▾</button><button class="sm" id="btnFit">Fit</button></div>
+  <div class="layers" id="layers" style="display:none"></div>
+</div>
+<input type="file" id="fileA" accept="image/*,.tif,.tiff" hidden>
+<input type="file" id="fileB" accept="image/*,.tif,.tiff" multiple hidden>
+
+<nav class="tabs" id="tabs"></nav>
+
+<section class="panel" id="p-setup">
+  <h3>1 · Image & scale</h3>
+  <div class="card kv" id="dsInfo"><span>No data loaded</span></div>
+  <h4>Scale</h4>
+  <p class="note">Draw a line with <b>📏 Scale</b> over something of known length (use Google Earth's ruler on the same view), then enter its length. GeoTIFFs set the scale automatically.</p>
+  <div class="row"><label>Known length</label><input type="number" id="knownLen" step="any" placeholder="e.g. 2.5"><select id="knownUnit"><option value="1000">km</option><option value="1">m</option><option value="1609.344">mi</option><option value="0.3048">ft</option></select><button class="sm" id="btnApplyScale">Apply</button></div>
+  <div class="row"><label>Or metres / pixel</label><input type="number" id="pxmIn" step="any"><button class="sm" id="btnApplyPxm">Set</button></div>
+  <div class="row"><label>Image up is</label><input type="number" id="northIn" value="0" step="any"><span class="note" style="margin:0">° from north (0 = north-up)</span></div>
+  <div id="scaleInfo" class="note"></div>
+  <div class="scaleprompt"></div>
+  <h4>Analysis area</h4>
+  <p class="note">Draw a box with <b>⬚ Area</b> to keep the analysis inside it. Use this to leave out map buttons, labels and the edges of a screenshot.</p>
+  <div class="btns"><button class="sm" id="btnClearRoi">Clear analysis area</button></div>
+  <h4>Working resolution</h4>
+  <div class="chips" id="resChips"></div>
+  <p class="note">Higher is more precise but slower on phones. Reload the file after changing.</p>
+  <div id="bandMap"></div>
+</section>
+
+<section class="panel" id="p-water">
+  <h3>2 · Water & channel mask</h3>
+  <p class="note">Everything else builds on this mask. Pick a method, tune it, and check the blue overlay.</p>
+  <div class="row"><label>Method</label><select id="wMode" style="flex:1"></select></div>
+  <div id="wSampleBox">
+    <p class="note">Use <b>💧 Sample</b> and tap the water a few times, including silty, clear and shallow water.</p>
+    <div class="row"><label>Colour tolerance</label><input type="range" id="wTol" min="2" max="45" value="14"><output id="wTolO">14</output></div>
+    <div class="btns"><span class="note" id="wSampN">0 samples</span><button class="sm" id="btnClearSamp">Clear samples</button></div>
+  </div>
+  <div id="wThrBox" style="display:none">
+    <div class="row"><label>Threshold</label><input type="range" id="wThr" min="0" max="1000" value="500"><output id="wThrO"></output></div>
+    <div class="btns"><button class="sm" id="btnOtsu">Auto (Otsu)</button><label class="note"><input type="checkbox" id="wInv"> invert</label></div>
+  </div>
+  <h4>Clean-up</h4>
+  <div class="row"><label>Smoothing</label><input type="range" id="wSmooth" min="0" max="6" value="1"><output id="wSmoothO">1 px</output></div>
+  <div class="row"><label>Drop specks under</label><input type="range" id="wMin" min="0" max="2000" value="150"><output id="wMinO"></output></div>
+  <div class="row"><label>Fill gaps under</label><input type="range" id="wHole" min="0" max="5000" value="300"><output id="wHoleO"></output></div>
+  <h4>Channel continuity</h4>
+  <div class="row"><label>Hysteresis</label><input type="range" id="wHyst" min="0" max="30" value="12"><output id="wHystO"></output></div>
+  <div class="btns"><label class="note"><input type="checkbox" id="wRidge" checked> boost thin, line-like channels</label><label class="note"><input type="checkbox" id="wRefine" checked> second pass: learn the water's colour spread</label><label class="note"><input type="checkbox" id="wML" checked> ML pixel classifier (self-trained)</label></div>
+  <div class="row"><label>Bridge gaps up to</label><input type="range" id="wBridge" min="0" max="40" value="6"><output id="wBridgeO"></output></div>
+  <p class="note">Hysteresis keeps uncertain pixels when they connect to clear water, so narrow channels stay continuous. Bridging joins channel pieces cut by bridges, shadows or cloud.</p>
+  <h4>Fix by hand</h4>
+  <p class="note">Use <b>🧽 Erase</b> to paint out mislabelled areas such as roads, clouds, labels or icons.</p>
+  <div class="row"><label>Brush</label><input type="range" id="brush" min="4" max="60" value="16"><output id="brushO">16</output></div>
+  <div class="btns"><label class="note"><input type="checkbox" id="brushRestore"> restore instead of erase</label><button class="sm" id="btnClearErase">Clear erasures</button></div>
+  <div class="btns"><button class="pri" id="btnWater">Detect water</button><button id="btnSeafloor" title="For Google Earth ocean-floor (bathymetry) views: traces canyons and channels as dark troughs in the shading">🌊 Seafloor channels</button></div>
+  <div id="res-water"></div>
+</section>
+
+<section class="panel" id="p-channel">
+  <h3>3 · Channel form</h3>
+  <p class="note">Tap <b>⊙ Outlet</b> at the mouth or downstream end and <b>◎ Head</b> upstream. If you skip these, the widest end and the farthest point are used. Measures the main channel between them.</p>
+  <div class="row"><label>Spur pruning</label><input type="range" id="pruneK" min="0" max="40" value="15"><output id="pruneKO">1.5× width</output></div>
+  <div class="row"><label>Transect length</label><input type="range" id="trK" min="1" max="20" value="3"><output id="trKO">±3 widths</output></div>
+  <div class="row"><label>Main channel</label><div class="chips" id="pathModes"></div></div>
+  <div class="btns"><button class="pri" id="btnChannel">Analyse channel</button></div>
+  <div id="res-channel"></div>
+  <h4>Channel+: necks, oxbows, bend shape</h4>
+  <div class="btns"><button class="sm" data-hl="necks">Show necks</button><button class="sm" data-hl="oxbows">Show oxbows</button><button class="sm" data-hl="localsin">Colour by local sinuosity</button></div>
+  <div id="res-channelx"></div>
+</section>
+
+<section class="panel" id="p-network">
+  <h3>4 · Channel network</h3>
+  <p class="note">Measures the whole connected network that drains to the outlet: Strahler stream orders, Horton ratios, loops, channel density and how far land lies from the nearest channel.</p>
+  <div class="btns"><button class="pri" id="btnNetwork">Analyse network</button></div>
+  <div id="res-network"></div>
+  <h4>Junctions & scaling</h4>
+  <div class="btns"><button class="sm" data-hl="junctions">Show junction angles</button></div>
+  <div id="res-networkx"></div>
+  <h4>Tributaries & distributaries</h4>
+  <p class="note">Every branch that meets the main channel: tributaries flow in, distributaries flow out, side channels split and rejoin. Measures where each joins, its length, width and junction angle.</p>
+  <div class="btns"><button class="sm pri" id="btnBranches">Find branches</button><button class="sm" data-hl="branches">Show</button></div>
+  <div id="res-branches"></div>
+  <h4>Delta</h4>
+  <p class="note">Finds the open water (sea or lake), the mouths where distributaries reach it, the apex where they split, and the delta's area and shoreline.</p>
+  <div class="btns"><button class="sm pri" id="btnDelta">Analyse delta</button><button class="sm" data-hl="delta">Show</button></div>
+  <div id="res-delta"></div>
+  <h4>Braided river</h4>
+  <p class="note">Outlines the braidplain (active channel belt), finds its bars, and counts channels across its full width.</p>
+  <div class="btns"><button class="sm pri" id="btnBraid">Analyse braiding</button><button class="sm" data-hl="braid">Show</button></div>
+  <div id="res-braid"></div>
+</section>
+
+<section class="panel" id="p-lakes">
+  <h3>5 · Lakes & ponds</h3>
+  <p class="note">Measures every separate water body: size, shape and orientation. The size distribution and orientation of thaw lakes record permafrost processes and the prevailing winds.</p>
+  <div class="row"><label>Min lake area</label><input type="range" id="lkMin" min="4" max="2000" value="30"><output id="lkMinO"></output></div>
+  <div class="btns"><label class="note"><input type="checkbox" id="lkNoNet" checked> exclude the channel network</label><label class="note"><input type="checkbox" id="lkNoEdge" checked> exclude bodies cut by the edge</label></div>
+  <div class="btns"><button class="pri" id="btnLakes">Analyse lakes</button></div>
+  <div id="res-lakes"></div>
+</section>
+
+<section class="panel" id="p-pattern">
+  <h3>6 · Bedforms & lineaments</h3>
+  <p class="note">Finds repeating patterns such as dune crests, ripples, ridges and fractures using a 2‑D Fourier spectrum and gradient orientations. Draw a box with <b>▦ Pattern</b> over a uniform patch. Without a box, the analysis area is used.</p>
+  <div class="btns"><button class="pri" id="btnPattern">Analyse pattern</button><button id="btnField">Map pattern across image</button></div>
+  <div id="res-pattern"></div>
+  <div id="res-field"></div>
+</section>
+
+<section class="panel" id="p-cover">
+  <h3>7 · Surface cover</h3>
+  <p class="note">Groups pixels into colour classes (water, sand, vegetation, rock…) with k‑means, then measures how much area each covers and how fragmented it is.</p>
+  <div class="row"><label>Classes</label><input type="range" id="kK" min="2" max="8" value="5"><output id="kKO">5</output></div>
+  <div class="btns"><button class="pri" id="btnCover">Classify surface</button></div>
+  <div id="res-cover"></div>
+</section>
+
+<section class="panel" id="p-terrain">
+  <h3>8 · Terrain & hydrology</h3>
+  <div id="terrNoDem" class="card warn">Needs an elevation model. Open a DEM GeoTIFF, for example Copernicus GLO‑30, SRTM or ArcticDEM from OpenTopography or the Copernicus Browser.</div>
+  <div id="terrBox" style="display:none">
+    <div class="row"><label>Cell size (m)</label><input type="number" id="cellX" step="any"><input type="number" id="cellY" step="any"></div>
+    <div class="row"><label>Vertical factor</label><input type="number" id="zFac" value="1" step="any"><span class="note" style="margin:0">× to convert to metres</span></div>
+    <div class="btns"><button class="pri" id="btnTerrain">Terrain statistics</button></div>
+    <div id="res-terrain"></div>
+    <h4>Flow & drainage</h4>
+    <p class="note">Fills pits, routes flow downhill (D8), extracts streams and the basin above <b>⊙ Outlet</b> (snapped to the largest stream nearby), and analyses the main stem's long profile.</p>
+    <div class="row"><label>Stream threshold</label><input type="range" id="thrA" min="0" max="1000" value="400"><output id="thrAO"></output></div>
+    <div class="btns"><button class="pri" id="btnHydro">Run hydrology</button></div>
+    <div id="res-hydro"></div>
+  </div>
+</section>
+
+<section class="panel" id="p-change">
+  <h3>9 · Change over time</h3>
+  <p class="note">Add images of the same place from other dates, for example from Google Earth's historical imagery (the clock icon). They can be zoomed, cropped or slightly rotated differently: each one is aligned to this image automatically.</p>
+  <div class="row"><label>Year of this image</label><input type="number" id="yrRef" step="any" placeholder="e.g. 2015"></div>
+  <div class="btns"><button class="pri" id="btnAddDates">Add images from other dates…</button></div>
+  <div id="serList"><p class="note">No other dates yet.</p></div>
+  <div id="tuneBox" class="card" style="display:none">
+    <b id="tuneName"></b><p class="note">Fine-tune the alignment while watching the map. Flicker helps you check it.</p>
+    <div class="row"><label>Shift x</label><input type="range" id="adj_dx" min="-60" max="60" value="0" step="0.5"><output id="adj_dxO">0</output></div>
+    <div class="row"><label>Shift y</label><input type="range" id="adj_dy" min="-60" max="60" value="0" step="0.5"><output id="adj_dyO">0</output></div>
+    <div class="row"><label>Scale %</label><input type="range" id="adj_ds" min="-15" max="15" value="0" step="0.1"><output id="adj_dsO">0</output></div>
+    <div class="row"><label>Rotate °</label><input type="range" id="adj_dr" min="-10" max="10" value="0" step="0.1"><output id="adj_drO">0</output></div>
+    <div class="btns"><button class="sm" id="btnRealign">Re-align automatically</button></div>
+  </div>
+  <h4>Compare</h4>
+  <div class="row"><label>Before / after</label><input type="range" id="swipe" min="0" max="100" value="0"><output>drag</output></div>
+  <div class="btns"><button class="sm" data-hl="compare">Change map</button></div>
+  <h4>Timeline</h4>
+  <div class="row"><label>Show image</label><input type="range" id="tlIdx" min="0" max="0" value="0"><output id="tlIdxO">reference</output></div>
+  <div class="btns"><button class="sm" id="btnFlicker">Flicker</button><button class="sm" data-hl="dates">Centrelines by date</button><button class="sm" data-hl="migration">Migration arrows</button></div>
+  <div class="row"><label>Arrow exaggeration</label><input type="range" id="arrowX" min="1" max="10" value="3"><output id="arrowXO">×3</output></div>
+  <div class="btns"><label class="note"><input type="checkbox" id="bAuto" checked> learn each date's water colours from the first image</label></div>
+  <div class="btns"><button class="pri" id="btnChange">Analyse change</button></div>
+  <div id="res-change"></div>
+</section>
+
+<section class="panel" id="p-measure">
+  <h3>10 · Measure by hand</h3>
+  <p class="note"><b>／ Line</b>: tap points along a feature to get its length, sinuosity and bearing, plus an elevation profile if a DEM is loaded. <b>⬠ Polygon</b>: tap around a feature to get its area, perimeter and shape.</p>
+  <div class="btns"><button class="sm" id="btnFinish">Finish shape</button><button class="sm" id="btnUndoPt">Undo point</button><button class="sm" id="btnClearMeas">Clear all</button></div>
+  <div id="res-measure"></div>
+</section>
+
+<section class="panel" id="p-plot">
+  <h3>Plot builder</h3>
+  <p class="note">Plot any table the analyses produced. Tap a quick plot, or choose the data, axes, chart type, colour grouping and a fitted trend line. Save the plot as PNG or the data as CSV.</p>
+  <div id="plotUI"></div>
+  <div id="plotOut"></div>
+</section>
+
+<section class="panel" id="p-learn">
+  <h3>Learn: how every measurement works</h3>
+  <p class="note">Each analysis step, illustrated, followed by a searchable glossary of every measurement.</p>
+  <div id="learnMods"></div>
+  <h4>Glossary</h4>
+  <input type="text" id="glSearch" placeholder="Search, e.g. sinuosity, Strahler, concavity" style="width:100%">
+  <div id="glList"></div>
+</section>
+
+<section class="panel" id="p-export">
+  <h3>Export</h3>
+  <p class="note">Download every computed measurement, the per-object tables, and an image of the map with overlays.</p>
+  <div class="btns">
+    <button id="exMetrics">All metrics (CSV)</button><button id="exLakes">Lakes (CSV)</button>
+    <button id="exProfiles">Profiles & bends (CSV)</button><button id="exJSON">Full report (JSON)</button><button id="exPNG">Map with overlays (PNG)</button>
+  </div>
+  <div id="res-export"></div>
+  <h4>Method notes</h4>
+  <div class="note" id="methods"></div>
+</section>
+
+</section>
+</div>
+<div class="modal" id="autoModal"><div class="box"><h3>✦ Working automatically</h3><div id="autoSteps"></div></div></div>
+<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>/*CORE*/</script>
+<script>/*TIFF*/</script>
+<script>/*STUDIO*/</script>
+<script>/*LAB*/</script>
+</body>
+</html>
